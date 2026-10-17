@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: miskiiney-bot
+    runtime: docker
+    plan: starter
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: DATABASE_URL
+        sync: false
+      - key: BOT_TOKEN
+        sync: false
+      - key: ADMIN_IDS
+        sync: false
+      - key: WEBHOOK_URL
+        sync: false
+      - key: WEBHOOK_SECRET
+        sync: false
+      - key: FILMS_CHANNEL_ID
+        value: "-1004293346319"
+      - key: SERIES_CHANNEL_ID
+        value: "-1004466790780"
+      - key: BOOKS_CHANNEL_ID
+        value: "-1004422146264"
+      - key: CURRICULUM_CHANNEL_ID
+        value: "-1003964674328"
