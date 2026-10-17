@@ -1,0 +1,17 @@
+{
+  "name": "miskiiney-bot",
+  "version": "1.0.0",
+  "description": "Miskiiney Telegram bot with channel-backed media library, admin panel, PostgreSQL and optional AI",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "check": "node --check src/index.js && node --check src/bot.js && node --check src/database.js && node --check src/content.js && node --check src/admin.js"
+  },
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "grammy": "^1.35.0",
+    "pg": "^8.13.1"
+  }
+}
