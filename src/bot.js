@@ -4,9 +4,12 @@ const config = require("./config");
 const { trackUser, logEvent } = require("./database");
 
 const {
-  CATEGORIES,
   CATEGORY_BY_CHANNEL,
   searchContent,
+  searchSeries,
+  getSeriesSeasons,
+  getSeriesParts,
+  findContentById,
   searchCurriculum,
   indexChannelPost
 } = require("./content");
@@ -29,7 +32,6 @@ const MESSAGES = {
 📺 Taxanayaasha
 📚 Buugaagta aqoonta
 🎓 Manhajka dowladda
-🎁 Waxyaabo yaab leh ayaa soo socda!
 
 💝 **Filim raadi, aqoon kororso, taxane ogow!**
 
@@ -37,75 +39,38 @@ const MESSAGES = {
 
   film: `🎬❤️ **WALAAL, FILIMKEE LAGUU RAADIYAA?** 😂🍿
 
-Ha wareegin Netflix oo dhan! 🤭💖
-
-🔎 Kaliya qor magaca filimka aad rabto, Miskiiney ayaana kaa caawinaysa raadintiisa.
-
-💌 **Magaca qor, walaal… aan kuu soo helnee!** 😍`,
+🔎 Kaliya qor magaca filimka aad rabto.`,
 
   book: `📚💖 **WALAAL, AQOON MA RAADINAYSAA?** 🧠✨
 
-Buug kasta wuxuu xambaarsan yahay aqoon cusub! 🌹
-
-🔎 Noo qor magaca buugga aad rabto inaan kuu raadino.
-
-💡 **Maskaxda quudi, aqoontana kobci!** ❤️📖`,
+🔎 Noo qor magaca buugga aad rabto inaan kuu raadino.`,
 
   curriculum: `🎓📚 **ARDAYYAHOW, MANHAJKAAGA HALKAN KA RAADI!** ❤️✨
 
 🔎 Qor fasalka iyo maadada aad rabto.
 
-📝 Tusaalooyin:
-📗 8aad, Saynis
-📘 9aad, Teknolaji
-📙 7aad, Xisaab
+📝 Tusaale: 8aad, Saynis
 
-⚠️ Haddii aadan helin buugga, hubi qoraalka ama isku day magac kale.
-
-🛟 Caawimaad: @${config.supportUsername}
-
-💪 **Aqoontu waa furaha mustaqbalkaaga!** 🌟`,
+🛟 Caawimaad: @${config.supportUsername}`,
 
   invite: `💖 **WALAAL, MISKIINEY KELIGAA HA KU RAAXAYSAN!** 😂🌸
 
-Saaxiibbadaa la wadaag madashan ay ka heli karaan 🎬 filimo, 📚 buugaag, 🎓 manhaj iyo waxyaabo kale oo xiiso leh!
+Saaxiibbadaa la wadaag bot-ka:
 
-🔗 https://t.me/${config.botUsername}
-
-❤️ **Wanaagga la wadaag, saaxiibbadaadana nala keen!** 🫶✨`,
+🔗 https://t.me/${config.botUsername}`,
 
   support: `🛟❤️ **MISKIINEY SUPPORT**
 
-Walaal, sideen kuu caawin karnaa? 🥹💖
+Caawimaad: @${config.supportUsername}
 
-🛟 **1. Caawimaad**
+Taageerada system-ka: ${config.systemSupportPhone}`,
 
-Dhibaato ma kaa haysataa isticmaalka bot-ka? Kala xiriir qofka ku caawinaya:
-
-👤 @${config.supportUsername}
-
-❤️ **2. Taageer System-ka**
-
-Ma rabtaa inaad dhaqaale ku taageerto Miskiiney si uu u horumaro? Taageeradaadu wax weyn ayay noo taraysaa. 🤝💖
-
-📞 ${config.systemSupportPhone}
-
-🌹 **Mahadsanid walaal, taageeradaadu waa horumarkeenna!** ❤️`,
-
-  group: `🌸💖 **HAA WALAAL, MISKIINEY WAA JOOGTAA!** 😂❤️
-
-Ma wax baad iga rabtaa, mise waad ii xiistay? 🤭💕
-
-✨ Waxaan ahay Miskiiney Bot, diyaar u ah caawimaad iyo jawi wanaagsan.
-
-💌 **Igu soo dhowow, walaal!** 🫶🌸`
+  group: `🌸💖 Haa walaal, Miskiiney waa joogtaa! ❤️`
 };
 
 async function safeTrack(ctx) {
   try {
-    if (ctx.from) {
-      await trackUser(ctx.from);
-    }
+    if (ctx.from) await trackUser(ctx.from);
   } catch (error) {
     console.error("User tracking error:", error.message);
   }
@@ -115,14 +80,9 @@ function inviteKeyboard() {
   const share =
     `https://t.me/share/url?url=${encodeURIComponent(
       `https://t.me/${config.botUsername}`
-    )}&text=${encodeURIComponent(
-      "Ku soo biir Miskiiney Bot! ❤️🎬📚"
-    )}`;
+    )}&text=${encodeURIComponent("Ku soo biir Miskiiney Bot! ❤️🎬📚")}`;
 
-  return new InlineKeyboard().url(
-    "👥 La wadaag Saaxiibbada",
-    share
-  );
+  return new InlineKeyboard().url("👥 La wadaag Saaxiibbada", share);
 }
 
 function escapeHtml(value) {
@@ -134,9 +94,11 @@ function escapeHtml(value) {
 
 async function sendResult(ctx, item) {
   const title = escapeHtml(item.title || "Content");
-  const year = item.year
-    ? ` (${escapeHtml(item.year)})`
-    : "";
+  const description =
+    item.description &&
+    item.description.trim() !== item.title
+      ? `\n\n${escapeHtml(item.description.slice(0, 700))}`
+      : "";
 
   const grade = item.grade
     ? `\n🎓 Fasalka: ${escapeHtml(item.grade)}`
@@ -146,14 +108,8 @@ async function sendResult(ctx, item) {
     ? `\n📚 Maadada: ${escapeHtml(item.subject)}`
     : "";
 
-  const description =
-    item.description &&
-    item.description.trim() !== item.title
-      ? `\n\n${escapeHtml(item.description.slice(0, 700))}`
-      : "";
-
   const caption =
-    `💖 <b>${title}</b>${year}${grade}${subject}${description}`;
+    `💖 <b>${title}</b>${grade}${subject}${description}`;
 
   const options = {
     caption,
@@ -182,6 +138,9 @@ async function sendResult(ctx, item) {
       case "video_note":
         return ctx.api.sendVideoNote(chatId, item.file_id);
 
+      case "sticker":
+        return ctx.api.sendSticker(chatId, item.file_id);
+
       default:
         return ctx.api.sendDocument(chatId, item.file_id, options);
     }
@@ -195,105 +154,153 @@ async function sendResult(ctx, item) {
     );
   }
 
-  throw new Error(
-    `No usable file ID or channel message for content ${item.id}`
+  throw new Error(`No usable file for content ${item.id}`);
+}
+
+async function makeSeasonKeyboard(seriesItem) {
+  const seasons = await getSeriesSeasons(seriesItem.normalized_title);
+  const keyboard = new InlineKeyboard();
+
+  for (const season of seasons) {
+    keyboard.text(
+      `Season ${season.season_number} (${season.part_count})`,
+      `series:season:${seriesItem.id}:${season.season_number}`
+    );
+
+    if (keyboard.inline_keyboard[keyboard.inline_keyboard.length - 1].length >= 2) {
+      keyboard.row();
+    }
+  }
+
+  if (keyboard.inline_keyboard.length) {
+    keyboard.row();
+  }
+
+  keyboard.text("🔄 Raadis kale", "series:search_help");
+
+  return { seasons, keyboard };
+}
+
+async function showSeries(ctx, seriesItem) {
+  const { seasons, keyboard } = await makeSeasonKeyboard(seriesItem);
+
+  const description = seriesItem.description
+    ? `\n\n${escapeHtml(seriesItem.description.slice(0, 500))}`
+    : "";
+
+  if (!seasons.length) {
+    return ctx.reply(
+      `📺 <b>${escapeHtml(seriesItem.title)}</b>${description}\n\n` +
+      `⚠️ Taxanahan weli looma diiwaangelin Seasons iyo Parts sax ah.\n` +
+      `Maamulka: ku qor caption-ka file kasta magaca taxanaha, Season iyo Part.`,
+      { parse_mode: "HTML" }
+    );
+  }
+
+  return ctx.reply(
+    `📺 <b>${escapeHtml(seriesItem.title)}</b>${description}\n\n` +
+    `Dooro Season-ka aad rabto:`,
+    {
+      parse_mode: "HTML",
+      reply_markup: keyboard
+    }
   );
 }
 
 async function answerSearch(ctx, query, category = null) {
   const cleaned = String(query || "").trim();
-
   if (!cleaned) return;
 
   try {
-    let results;
-
     const curriculumMatch = cleaned.match(
       /^(\d{1,2}(?:aad)?)\s*[,|]\s*(.+)$/i
     );
 
     if (!category && curriculumMatch) {
-      results = await searchCurriculum(
+      const curriculum = await searchCurriculum(
         curriculumMatch[1],
         curriculumMatch[2]
       );
-    } else {
-      results = await searchContent(cleaned, category);
-    }
 
-    if (!results.length) {
-      const hint =
-        category === "curriculum" || curriculumMatch
-          ? "\n\nTusaale: 8aad, Saynis"
-          : "\n\nHubi higgaadda ama isku day magaca oo dhan. Haddii aad weli u baahan tahay caawimaad, la xiriir @" +
-            config.supportUsername;
+      if (!curriculum.length) {
+        await ctx.reply("😔 Manhaj ku habboon lama helin. Tusaale: 8aad, Saynis");
+        return;
+      }
 
-      await ctx.reply(
-        `😔 Walaal, wax ku habboon raadintaada lama helin.${hint}`
-      );
-
-      await logEvent("search", false, {
-        query: cleaned,
-        category
-      });
-
+      for (const item of curriculum.slice(0, config.searchLimit)) {
+        try {
+          await sendResult(ctx, item);
+        } catch (error) {
+          console.error("Curriculum send failed:", error.message);
+        }
+      }
       return;
     }
 
-    await ctx.reply(
-      `🔎 Waxaan helay ${results.length} natiijo. ❤️`
-    );
+    let seriesResults = [];
+
+    if (!category || category === "series") {
+      seriesResults = await searchSeries(cleaned);
+    }
+
+    let otherResults = await searchContent(cleaned, category);
+
+    // Series are represented by one result each and opened through Season buttons.
+    otherResults = otherResults.filter(item => item.category !== "series");
+
+    if (category === "series") {
+      otherResults = [];
+    }
+
+    if (!seriesResults.length && !otherResults.length) {
+      await ctx.reply(
+        "😔 Walaal, wax ku habboon raadintaada lama helin.\n\n" +
+        "Hubi higgaadda ama isku day magaca oo dhan."
+      );
+
+      await logEvent("search", false, { query: cleaned, category });
+      return;
+    }
+
+    if (seriesResults.length) {
+      await ctx.reply(
+        `📺 Waxaan helay ${seriesResults.length} taxane oo ku habboon raadintaada.`
+      );
+
+      for (const item of seriesResults.slice(0, config.searchLimit)) {
+        try {
+          await showSeries(ctx, item);
+        } catch (error) {
+          console.error("Showing series failed:", error.message);
+        }
+      }
+    }
 
     let sent = 0;
-    let failed = 0;
 
-    for (const item of results.slice(0, config.searchLimit)) {
+    for (const item of otherResults.slice(0, config.searchLimit)) {
       try {
         await sendResult(ctx, item);
         sent++;
       } catch (error) {
-        failed++;
-
         console.error("Sending result failed:", {
-          query: cleaned,
           title: item.title,
-          contentId: item.id,
-          fileIdPresent: Boolean(item.file_id),
-          mediaType: item.media_type,
-          channelId: item.channel_id,
-          channelMessageId: item.channel_message_id,
-          message: error.message,
-          description: error.description,
-          errorCode: error.error_code
-        });
-
-        await logEvent("send_result", false, {
-          query: cleaned,
-          title: item.title,
-          contentId: item.id,
-          mediaType: item.media_type,
-          error: error.description || error.message
+          id: item.id,
+          message: error.message
         });
       }
     }
 
-    await logEvent("search", sent > 0, {
-      query: cleaned,
-      category,
-      count: results.length,
-      sent,
-      failed
-    });
-
-    if (sent === 0 && failed > 0) {
-      await ctx.reply(
-        "⚠️ Walaal, waan helay diiwaanka laakiin faylasha lama soo diri karin. Maamulka ayaa ka eegi kara Render Logs."
-      );
-    } else if (failed > 0) {
-      await ctx.reply(
-        `ℹ️ ${sent} fayl waa la diray, ${failed} faylna diristoodu way fashilantay.`
-      );
-    }
+    await logEvent(
+      "search",
+      seriesResults.length > 0 || sent > 0,
+      {
+        query: cleaned,
+        category,
+        seriesCount: seriesResults.length,
+        otherCount: sent
+      }
+    );
   } catch (error) {
     console.error("Search error:", error);
 
@@ -309,16 +316,118 @@ async function answerSearch(ctx, query, category = null) {
   }
 }
 
+async function handleSeriesCallback(ctx) {
+  const data = String(ctx.callbackQuery?.data || "");
+
+  if (!data.startsWith("series:")) return false;
+
+  await ctx.answerCallbackQuery();
+
+  if (data === "series:search_help") {
+    await ctx.reply("🔎 Fadlan dib u qor magaca taxanaha aad rabto.");
+    return true;
+  }
+
+  const seasonMatch = data.match(/^series:season:(\d+):(\d+)$/);
+
+  if (seasonMatch) {
+    const seriesId = seasonMatch[1];
+    const seasonNumber = Number(seasonMatch[2]);
+
+    const seriesItem = await findContentById(seriesId);
+
+    if (!seriesItem || seriesItem.category !== "series") {
+      await ctx.reply("Taxanahan lama helin. Fadlan magaca mar kale raadi.");
+      return true;
+    }
+
+    const parts = await getSeriesParts(
+      seriesItem.normalized_title,
+      seasonNumber
+    );
+
+    if (!parts.length) {
+      await ctx.reply(`Season ${seasonNumber} weli qaybo laguma hayo.`);
+      return true;
+    }
+
+    const keyboard = new InlineKeyboard();
+
+    for (const part of parts) {
+      keyboard.text(
+        `Part ${part.part_number}`,
+        `series:part:${part.id}`
+      );
+
+      if (
+        keyboard.inline_keyboard[keyboard.inline_keyboard.length - 1].length >= 3
+      ) {
+        keyboard.row();
+      }
+    }
+
+    keyboard.row().text("↩️ Seasons-ka", `series:open:${seriesItem.id}`);
+
+    await ctx.reply(
+      `📺 <b>${escapeHtml(seriesItem.title)}</b>\n` +
+      `<b>Season ${seasonNumber}</b>\n\n` +
+      `Dooro qaybta aad rabto:`,
+      {
+        parse_mode: "HTML",
+        reply_markup: keyboard
+      }
+    );
+
+    return true;
+  }
+
+  const openMatch = data.match(/^series:open:(\d+)$/);
+
+  if (openMatch) {
+    const item = await findContentById(openMatch[1]);
+
+    if (!item || item.category !== "series") {
+      await ctx.reply("Taxanahan lama helin.");
+      return true;
+    }
+
+    await showSeries(ctx, item);
+    return true;
+  }
+
+  const partMatch = data.match(/^series:part:(\d+)$/);
+
+  if (partMatch) {
+    const item = await findContentById(partMatch[1]);
+
+    if (!item || item.category !== "series" || !item.active) {
+      await ctx.reply("Qaybtan lama helin ama hadda lama heli karo.");
+      return true;
+    }
+
+    try {
+      await sendResult(ctx, item);
+    } catch (error) {
+      console.error("Sending selected series part failed:", error);
+      await ctx.reply(
+        "⚠️ Qaybtan waa la helay laakiin diristeedu way fashilantay."
+      );
+    }
+
+    return true;
+  }
+
+  return true;
+}
+
 bot.use(async (ctx, next) => {
   await safeTrack(ctx);
   await next();
 });
 
-bot.command("start", async ctx => {
-  await ctx.reply(MESSAGES.start, {
-    parse_mode: "Markdown"
-  });
-});
+bot.command("start", ctx =>
+  ctx.reply(MESSAGES.start, { parse_mode: "Markdown" })
+);
 
 bot.command("film_baare", ctx =>
   ctx.reply(MESSAGES.film, { parse_mode: "Markdown" })
@@ -343,16 +452,15 @@ bot.command("caawimad_taagero", ctx =>
   ctx.reply(MESSAGES.support, { parse_mode: "Markdown" })
 );
 
-bot.command("miskiiney", async ctx => {
-  await ctx.reply(MESSAGES.group, {
-    parse_mode: "Markdown"
-  });
-});
+bot.command("miskiiney", ctx =>
+  ctx.reply(MESSAGES.group, { parse_mode: "Markdown" })
+);
 
 bot.command("admin", ctx => showAdmin(ctx));
 
 bot.on("callback_query:data", async ctx => {
   try {
+    if (await handleSeriesCallback(ctx)) return;
     await handleCallback(ctx);
   } catch (error) {
     console.error("Callback error:", error);
@@ -366,24 +474,17 @@ bot.on("callback_query:data", async ctx => {
 });
 
 bot.on("message", async ctx => {
-  if (!ctx.message || ctx.message.chat.type === "channel") {
-    return;
-  }
+  if (!ctx.message || ctx.message.chat.type === "channel") return;
 
-  if (await handleAdminMessage(ctx)) {
-    return;
-  }
+  if (await handleAdminMessage(ctx)) return;
 
   const text = ctx.message.text?.trim();
-
-  if (!text || text.startsWith("/")) {
-    return;
-  }
+  if (!text || text.startsWith("/")) return;
 
   if (ctx.chat.type !== "private") {
     if (
       config.groupChatId &&
-      String(ctx.chat.id) !== config.groupChatId
+      String(ctx.chat.id) !== String(config.groupChatId)
     ) {
       return;
     }
@@ -394,12 +495,9 @@ bot.on("message", async ctx => {
     ).test(text);
 
     const repliedToBot =
-      ctx.message.reply_to_message?.from?.id ===
-      bot.botInfo?.id;
+      ctx.message.reply_to_message?.from?.id === bot.botInfo?.id;
 
-    if (!mention && !repliedToBot) {
-      return;
-    }
+    if (!mention && !repliedToBot) return;
   }
 
   const curriculumMatch = text.match(
@@ -413,16 +511,16 @@ bot.on("message", async ctx => {
   return answerSearch(ctx, text);
 });
 
-bot.on("channel_post", async ctx => {
+async function handleChannelPost(ctx) {
   try {
-    const post = ctx.channelPost;
-
+    const post = ctx.channelPost || ctx.editedChannelPost;
     if (!post) return;
 
-    const category =
-      CATEGORY_BY_CHANNEL[String(post.chat.id)];
-
-    if (!category) return;
+    const category = CATEGORY_BY_CHANNEL[String(post.chat.id)];
+    if (!category) {
+      console.log(`Ignored post from unconfigured channel ${post.chat.id}`);
+      return;
+    }
 
     await indexChannelPost(ctx, category);
 
@@ -433,12 +531,15 @@ bot.on("channel_post", async ctx => {
     console.error("Channel indexing failed:", error);
 
     await logEvent("channel_index", false, {
-      channelId: ctx.channelPost?.chat?.id,
-      messageId: ctx.channelPost?.message_id,
+      channelId: ctx.channelPost?.chat?.id || ctx.editedChannelPost?.chat?.id,
+      messageId: ctx.channelPost?.message_id || ctx.editedChannelPost?.message_id,
       error: error.message
     });
   }
-});
+}
+
+bot.on("channel_post", handleChannelPost);
+bot.on("edited_channel_post", handleChannelPost);
 
 bot.catch(error => {
   console.error("Bot error:", error.error || error);
